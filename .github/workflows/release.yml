@@ -1,0 +1,207 @@
+name: 🚀 Build and Release YTDL
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  build-web:
+    name: 🌐 Build Web App
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: 🔧 Install dependencies
+        run: uv sync
+
+      - name: 🌐 Build web app
+        run: uv run python release/build_web.py
+
+      - name: 📤 Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytdl-web
+          path: build/web/
+
+  build-android:
+    name: 📱 Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: ☕ Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: 🔧 Install dependencies
+        run: uv sync
+
+      - name: 📱 Build Android APK
+        run: uv run python release/build_android.py
+
+      - name: 📤 Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytdl-android
+          path: build/apk/
+
+  build-desktop:
+    name: 🖥️ Build Desktop Apps
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: 🔧 Install dependencies
+        run: uv sync
+
+      - name: 🖥️ Build desktop app
+        run: uv run flet build ${{ matrix.platform }} --project YTDL --verbose
+
+      - name: 📤 Upload desktop build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytdl-${{ matrix.platform }}
+          path: build/${{ matrix.platform }}/
+
+  create-release:
+    name: 🎉 Create Release
+    needs: [build-web, build-android, build-desktop]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: 📦 Create release package
+        run: |
+          mkdir -p release-package
+          cp -r artifacts/ytdl-web release-package/web
+          cp -r artifacts/ytdl-android release-package/apk
+          cp -r artifacts/ytdl-linux release-package/linux
+          cp -r artifacts/ytdl-windows release-package/windows
+          cp -r artifacts/ytdl-macos release-package/macos
+          
+          # Create release notes
+          cat > release-package/README.md << 'EOF'
+          # YTDL Release ${{ github.ref_name }}
+          
+          ## 🎉 Complete Release Package
+          
+          ### 📱 Android APK
+          - **File**: `YTDL.apk`
+          - **Install**: Transfer to Android device and install
+          - **Features**: Full YTDL functionality on Android
+          
+          ### 🌐 Web Application
+          - **Deploy**: Upload `web/` contents to any web server
+          - **Demo**: [Live Demo](https://your-domain.com)
+          - **Features**: Browser-based YTDL with modern UI
+          
+          ### 🖥️ Desktop Applications
+          - **Windows**: `YTDL.exe`
+          - **macOS**: `YTDL.app`
+          - **Linux**: `YTDL` (executable)
+          
+          ## 🚀 Features
+          - 50+ platform support including adult content
+          - Video/Audio downloads with quality selection
+          - Batch processing with queue management
+          - Format conversion with FFmpeg
+          - Modern Material Design interface
+          - Instant theme switching (Dark/Light/Kawaii)
+          - Cross-platform compatibility
+          
+          ## 📋 Installation
+          
+          ### Android
+          1. Download `YTDL.apk`
+          2. Enable "Install from unknown sources" in Android settings
+          3. Install the APK
+          
+          ### Web
+          Upload the `web/` directory contents to your web server.
+          
+          ### Desktop
+          Download and run the appropriate executable for your platform.
+          
+          ---
+          Built with ❤️ using Flet framework
+          EOF
+
+      - name: 🗜️ Create ZIP archives
+        run: |
+          cd release-package
+          zip -r ../ytdl-web-${{ github.ref_name }}.zip web/
+          zip -r ../ytdl-android-${{ github.ref_name }}.zip apk/
+          zip -r ../ytdl-desktop-${{ github.ref_name }}.zip linux/ windows/ macos/
+          cd ..
+
+      - name: 🎉 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ytdl-web-${{ github.ref_name }}.zip
+            ytdl-android-${{ github.ref_name }}.zip
+            ytdl-desktop-${{ github.ref_name }}.zip
+            release-package/apk/YTDL.apk
+          body_path: release-package/README.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
