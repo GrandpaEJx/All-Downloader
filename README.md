@@ -37,14 +37,14 @@ Download from **50+ platforms** including:
 
 ### Using uv (Recommended)
 ```bash
-git clone <repository-url>
+git clone https://github.com/GrandpaEJx/All-Downloader
 cd ytdl
 uv sync
 ```
 
 ### Using pip
 ```bash
-git clone <repository-url>
+git clone https://github.com/GrandpaEJx/All-Downloader
 cd ytdl
 pip install -e .
 ```
@@ -242,7 +242,7 @@ This tool is for educational and personal use only. Please respect the terms of 
 
 ```bash
 # Clone and run
-git clone <repository-url>
+git clone https://github.com/GrandpaEJx/All-Downloader
 cd ytdl
 uv sync
 uv run python main.py
